@@ -1,0 +1,13 @@
+[Unit]
+Description=Minecraft Server Java with MCSO
+PartOf=minecraft-master-session.service
+After=Network-online.target minecraft-master-session.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mcso/start_mcso.sh -j
+ExecStop=/opt/mcso/stop_mcso.sh -j
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

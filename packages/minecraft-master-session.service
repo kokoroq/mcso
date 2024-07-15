@@ -1,0 +1,11 @@
+[Unit]
+Description=Master tmux Session for Minecraft Server
+After=Network-online.target
+
+[Service]
+Type=forking
+ExecStart=/opt/mcso/system_mcso.sh -mr
+ExecStop=/opt/mcso/system_mcso.sh -mt
+
+[Install]
+WantedBy=multi-user.target

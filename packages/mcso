@@ -1,0 +1,459 @@
+#!/bin/bash
+#
+# read systemc files
+source /etc/mcso/mcso.conf
+source /var/lib/mcso/system_data.mcso
+
+##################################################################
+# Minecraft Complex Server Operator (MCSO)
+#
+# Copyright (c) 2023-2024 kokoroq. All rights reserved.
+#
+# This script is a MCSO command
+#
+##################################################################
+#
+# Command guide
+#
+usage () {
+    cat << EOF
+    Usage: mcso [OPTION]... [COMMAND]
+
+    Minecraft Complex Server Operator tools
+
+        -bb [full/instant]              Backup for Minecraft BE Server, Add "full" or "instant" after -bb
+        -bj [full/instant]              Backup for Minecraft Java Server, Add "full" or "instant" after -bj
+        -cb SESSION_NO COMMAND          Send command to the Minecraft BE Server through tmux
+        -cj SESSION_NO COMMAND          Send command to the Minecraft Java Server through tmux 
+        -r [be/java]                    [RECOMMEND using systemd] Run Minecraft Server
+        -t [be/java]                    [RECOMMEND using systemd] Terminate Minecraft Server
+        -s | --stat                     Display current Minecraft Server status
+        -u [online/FILE PATH]           Update minecraft server application
+                                            online : Download from the internet and update
+                                            FILE PATH : Update by specifying local update file
+        -v [server]                     Display version of
+                                            -v : MCSO version
+                                            -v server : Minecraft server version
+        -h                              Display MCSO help
+        --restore [be/java]             Restore any full backup
+        --cpua [enable/disable]         Enable/Disable the specification of the processor used by the Minecraft Server
+                                        To specify the number of CPUs, either edit parameter in the mcso.conf or execute the following command
+                                            -c [be/java] PROCESSOR_ID(s)
+
+    Examples:
+        mcso -bb full                     Start BE full backup
+        mcso -cb 0 "say HELLO!"           Send COMMAND to tmux
+EOF
+}
+
+##################################################################
+#                           FUNCTIONS                            #
+##################################################################
+#   1. Backup
+#   2. Sending Minecraft command
+#   3. MCSO status
+#   4. CPU Affinity
+#   5. Update
+#   6. Display version
+#   7. Start server
+#   8. Stop server
+##################################################################
+
+
+# Backup function
+func_bk_be () {
+    if [ "$1" = "full" ]; then
+        # Start full backup
+        echo "Start FULL backup for BE"
+        $MCSO_DIR/backup_mcso.sh -fb
+        echo "Backup complete"
+        echo "Please check the backup directory"
+    elif [ "$1" = "instant" ]; then
+        # Start instant backup
+        echo "Start INSTANT backup for BE"
+        $MCSO_DIR/backup_mcso.sh -ib
+        echo "Backup complete"
+        echo "Please check the backup directory"
+    else
+        echo "Invalid option"
+        exit 1
+    fi
+}
+
+func_bk_java () {
+    if [ "$1" = "full" ]; then
+        # Start full backup
+        echo "Start FULL backup for JavaE"
+        $MCSO_DIR/backup_mcso.sh -fj
+        echo "Backup complete"
+        echo "Please check the backup directory"
+    elif [ "$1" = "instant" ]; then
+        # Start instant backup
+        echo "Start INSTANT backup for JavaE"
+        $MCSO_DIR/backup_mcso.sh -ij
+        echo "Backup complete"
+        echo "Please check the backup directory"
+    else
+        echo "Invalid option"
+        exit 1
+    fi
+}
+
+# Send command to the Minecraft Server through tmux
+func_sc () {
+    if [ "$1" = "be" ]; then
+        online=`tmux ls 2>&1 | grep $TMUX_BE_SESSION | wc -l`
+        if [ $online -eq 0 ]; then
+            echo "Minecraft Server is not running."
+        else
+            echo "SEND THE FOLLOWING COMMAND TO THE MINECRAFT SERVER"
+            echo "$3"
+            echo -e ""
+            /usr/bin/tmux send-keys -t $TMUX_BE_SESSION$2 "$3" C-m
+            echo "Complete"
+            echo "Please check the tmux session of Minecraft Server"
+        fi
+    else
+        online=`tmux ls 2>&1 | grep $TMUX_JAVA_SESSION | wc -l`
+        if [ $online -eq 0 ]; then
+            echo "Minecraft Server is not running."
+        else
+            echo "SEND THE FOLLOWING COMMAND TO THE MINECRAFT SERVER"
+            echo "$3"
+            echo -e ""
+            /usr/bin/tmux send-keys -t $TMUX_JAVA_SESSION$2 "$3" C-m
+            echo "Complete"
+            echo "Please check the tmux session of Minecraft Server"
+        fi
+    fi
+}
+
+# Display MCSO status
+func_status () {
+    echo "------------------------------------------------------"
+    echo "Minecraft Server status"
+    echo "------------------------------------------------------"
+
+    # Running or not running of Minecraft BE Server
+    if [ $BE_TOOLS = "enable" ]; then
+        online=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+        if [ $online -ge 1 ]; then
+            echo "[*] BE Status:            RUNNING"
+        else
+            echo "[!] BE Status:            STOP"
+        fi
+
+    # Auto running status of BE
+        sudo systemctl is-enabled minecraft-be-server.service >/dev/null
+        if [ "$?" -eq 0 ]; then
+            echo "[*] Auto running of BE:   ENABLE"
+        else
+            echo "[!] Auto running of BE:   DISABLE"
+        fi
+    fi
+
+    # Running or not running of Minecraft Java Server
+    if [ $JAVA_TOOLS = "enable" ]; then
+        online2=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
+        if [ $online2 -ge 1 ]; then
+            echo "[*] Java Status:          RUNNING"
+        else
+            echo "[!] Java Status:          STOP"
+        fi
+    
+    # Auto running status of Java
+        sudo systemctl is-enabled minecraft-java-server.service >/dev/null
+        if [ "$?" -eq 0 ]; then
+            echo "[*] Auto running of Java: ENABLE"
+        else
+            echo "[!] Auto running of Java: DISABLE"
+        fi
+    fi
+
+    # View tmux session 
+    echo "[*] tmux session list:"
+    /usr/bin/tmux ls
+
+    # View tmux window
+    echo "[*] tmux window list:"
+    /usr/bin/tmux list-windows
+
+    # Check CPU affinity
+    if [ $CPU_AFFINITY = "Enable" ]; then
+        echo "[*] CPU affinity:         ENABLE"
+        echo "  Number of cpu of BE     $CPU_NUM_BE"
+        echo "  Number of cpu of Java   $CPU_NUM_JAVA"
+    else
+        echo "[*] CPU affinity:         DISABLE"
+    fi
+
+
+    # Count full BE backup files
+    if [ $BE_TOOLS = "enable" ]; then
+        count_fb=`ls -1U $FULL_BACKUP_BE_DIR | wc -l`
+        echo "[*] The number of full BE backup file(s):         $count_fb"
+
+    # Count instant BE backup files
+        count_ib=`ls -1U $INSTANT_BACKUP_BE_DIR | wc -l`
+        echo "[*] The number of instant BE backup file(s):      $count_ib"
+    fi
+
+    # Count full Java backup files
+    if [ $JAVA_TOOLS = "enable" ]; then
+        count_fb=`ls -1U $FULL_BACKUP_JAVA_DIR | wc -l`
+        echo "[*] The number of full Java backup file(s):       $count_fb"
+
+    # Count instant Java backup files
+        count_ib=`ls -1U $INSTANT_BACKUP_JAVA_DIR | wc -l`
+        echo "[*] The number of instant Java backup file(s):    $count_ib"
+    fi
+
+    # Count tmux log files of BE
+    if [ $BE_TOOLS = "enable" ]; then
+        count_lt=`ls -1U $LOG_BE_DIR | wc -l`
+        echo "[*] The number of tmux log file(s) of BE:         $count_lt"
+    fi
+
+    # Count tmux log files of Java
+    if [ $JAVA_TOOLS = "enable" ]; then
+        count_lt=`ls -1U $LOG_JAVA_DIR | wc -l`
+        echo "[*] The number of tmux log file(s) of Java:       $count_lt"
+    fi
+    echo "######################################################"
+}
+
+# CPU Affinity
+func_cpua () {
+    if [ "$1" = "enable" ]; then
+        sed -i -e 's/CPU_AFFINITY=.*/CPU_AFFINITY="Enable"/g' /etc/mcso/mcso.conf
+        echo "MCSO CPU affinity is ENABLE!"
+        echo "RESTART the Minecraft Server to apply it"
+    elif [ "$1" = "disable" ]; then
+        sed -i -e 's/CPU_AFFINITY=.*/CPU_AFFINITY="Disable"/g' /etc/mcso/mcso.conf
+        echo "MCSO CPU affinity is DISABLE!"
+        echo "RESTART the Minecraft Server to apply it"
+    elif [ "$1" = "be" ]; then
+        echo "CPU Affinity is $CPU_AFFINITY"
+        sed -i -e "s/CPU_NUM_BE=.*/CPU_NUM_BE=$2/g" /etc/mcso/mcso.conf
+        echo "The number of CPUs used by the Minecraft BE Server has been changed to $2."
+        echo "RESTART the Minecraft Server to apply it"
+    elif [ "$1" = "java" ]; then
+        echo "CPU Affinity is $CPU_AFFINITY"
+        sed -i -e "s/CPU_NUM_JAVA=.*/CPU_NUM_JAVA=$2/g" /etc/mcso/mcso.conf
+        echo "The number of CPUs used by the Minecraft Java Server has been changed to $2."
+        echo "RESTART the Minecraft Server to apply it"
+    else
+        echo "CPU Affinity is $CPU_AFFINITY"
+    fi
+}
+
+# Update minecraft server application
+func_update () {
+    if [ "$1" = "online" ]; then
+        $MCSO_DIR/update_mcso.sh -o
+    elif [ "$1" = "" ]; then
+        echo "Invalid args."
+        echo "mcso -h"
+        echo "to see USAGE"
+    else
+        touch /tmp/update_path.txt
+        echo $1 > /tmp/update_path.txt
+        $MCSO_DIR/update_mcso.sh -f
+    fi
+}
+
+# Version infomation
+func_version () {
+    if [ "$1" = "mcso" ]; then
+        echo "Minecraft Complex Server Operator $VERSION"
+    elif [ "$1" = "ms" ]; then
+        if [ -e $MS_BE_DIR/be_version.txt ]; then
+            echo "BE server version:    `head -n 1 $MS_BE_DIR/be_version.txt`"
+            if [ -e $MS_JAVA_DIR/java_version.txt ]; then
+                echo "Java server version:  `head -n 1 $MS_JAVA_DIR/java_version.txt`"
+            else
+                echo "<!> Not Minecraft Java server version info"
+            fi
+        elif [ -e $MS_JAVA_DIR/java_version.txt ]; then
+            echo "Java server version:  `head -n 1 $MS_JAVA_DIR/java_version.txt`"
+            if [ -e $MS_BE_DIR/be_version.txt ]; then
+                echo "BE server version:    `head -n 1 $MS_BE_DIR/be_version.txt`"
+            else
+                echo "<!> Not Minecraft BE server version info"
+            fi
+        else
+            echo "<!> Not Minecraft server version info"
+        fi
+    fi
+}
+
+# Start server
+func_start () {
+    if [ "$1" = "be" ]; then
+        if [ $BE_TOOLS = "enable" ]; then
+            # Check Master session
+            sudo systemctl status minecraft-master-session.service >/dev/null
+            if [ "$?" -ne 0 ]; then
+                sudo systemctl start minecraft-master-session.service >/dev/null
+                sudo systemctl status minecraft-master-session.service >/dev/null
+                if [ "$?" -ne 0 ]; then
+                    echo "The master session could NOT be ACTIVE"
+                    echo "Check your system"
+                    exit 1
+                fi
+            fi
+            sudo systemctl start minecraft-be-server.service >/dev/null
+            online=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+            if [ $online -ge 1 ]; then
+                echo "Minecraft BE Server is RUNNING"
+            else
+                echo "FAILED to start Minecraft BE Server"
+            fi
+        else
+            echo "The BE server is NOT INSTALLED"
+            exit 1
+        fi
+    elif [ "$1" = "java" ]; then
+        if [ $JAVA_TOOLS = "enable" ]; then
+            # Check Master session
+            sudo systemctl status minecraft-master-session.service >/dev/null
+            if [ "$?" -ne 0 ]; then
+                sudo systemctl start minecraft-master-session.service >/dev/null
+                sudo systemctl status minecraft-master-session.service >/dev/null
+                if [ "$?" -ne 0 ]; then
+                    echo "The master session could NOT be ACTIVE"
+                    echo "Check your system"
+                    exit 1
+                fi
+            fi
+            sudo systemctl start minecraft-java-server.service >/dev/null
+            online=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
+            if [ $online -ge 1 ]; then
+                echo "Minecraft Java Server is RUNNING"
+            else
+                echo "FAILED to start Minecraft Java Server"
+            fi
+        else
+            echo "The Java server is NOT INSTALLED"
+            exit 1
+        fi
+    fi
+}
+
+# stop server
+func_stop () {
+    if [ "$1" = "be" ]; then
+        if [ $BE_TOOLS = "enable" ]; then
+            # Check if it is running BE server
+            online=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+            if [ $online -ge 1 ]; then
+                sudo systemctl stop minecraft-be-server.service >/dev/null
+                online=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+                if [ $online -ge 1 ]; then
+                    echo "The BE server could not be TERMINATED"
+                    echo "Check your system"
+                    exit 1
+                else
+                    sudo systemctl stop minecraft-master-session.service >/dev/null
+                    sudo systemctl status minecraft-master-session.service >/dev/null
+                    if [ "$?" -ne 0 ]; then
+                        echo "Minecraft BE server has been TERMINATED"
+                    else
+                        echo "The master session could NOT be TERMINATED"
+                        echo "Check your system"
+                        exit 1
+                    fi
+                fi
+            else
+                echo "Minecraft BE Server is NOT RUNNING"
+            fi
+        else
+            echo "The BE server is NOT INSTALLED"
+            exit 1
+        fi
+    elif [ "$1" = "java" ]; then
+        if [ $JAVA_TOOLS = "enable" ]; then
+            # Check if it is running BE server
+            online=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
+            if [ $online -ge 1 ]; then
+                sudo systemctl stop minecraft-java-server.service >/dev/null
+                online=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
+                if [ $online -ge 1 ]; then
+                    echo "The Java server could NOT be TERMINATED"
+                    echo "Check your system"
+                    exit 1
+                else
+                    sudo systemctl stop minecraft-master-session.service >/dev/null
+                    sudo systemctl status minecraft-master-session.service >/dev/null
+                    if [ "$?" -ne 0 ]; then
+                        echo "Minecraft Java server has been TERMINATED"
+                    else
+                        echo "The master session could NOT be TERMINATED"
+                        echo "Check your system"
+                        exit 1
+                    fi
+                fi
+            else
+                echo "Minecraft Java Server is NOT RUNNING"
+            fi
+        else
+            echo "The Java server is NOT RUNNING"
+            exit 1
+        fi
+    fi
+}
+
+##################################################################
+#                               Main                             #
+##################################################################
+case $1 in
+    -bb ) func_bk_be $2 ;;
+    -bj ) func_bk_java $2 ;;
+    -cb ) func_sc "be" $2 "$3" ;;
+    -cj ) func_sc "jv" $2 "$3" ;;
+    -r | --run ) 
+        if [ $# -eq 2 ]; then
+            func_start $2
+        else
+            echo "Do you want to start BE or Java server?"
+            echo "[1] BE server"
+            echo "[2] Java server"
+            read -p "Please select from the numbers above: " selectserver
+            if [ $selectserver -eq 1 ]; then
+                func_start be
+            elif [ $selectserver -eq 2 ]; then
+                func_start java
+            else
+                echo "Invalid number"
+                echo "Please start over"
+                exit 1
+            fi
+        fi
+        ;;
+    -t | --terminate )
+        if [ $# -eq 2 ]; then
+            func_stop $2
+        else
+            echo "Do you want to stop BE or Java server?"
+            echo "[1] BE server"
+            echo "[2] Java server"
+            read -p "Please select from the numbers above: " selectserver
+            if [ $selectserver -eq 1 ]; then
+                func_stop be
+            elif [ $selectserver -eq 2 ]; then
+                func_stop java
+            else
+                echo "Invalid number"
+                echo "Please start over"
+                exit 1
+            fi
+        fi
+        ;;
+    -s | --stat ) func_status ;;
+    -u ) func_update $2 ;;
+    --cpua ) func_cpua $2 $3 ;;
+    --restore ) if [ "$2" = "be" ]; then $MCSO_DIR/backup_mcso.sh -rb; elif [ "$2" = "java" ]; then $MCSO_DIR/backup_mcso.sh -rj; fi ;;
+    -v ) if [ "$2" = "server" ]; then func_version "ms" ; else func_version "mcso"; fi ;;
+    -h ) usage ;;
+    * ) echo "Invalid argument"; usage ;;
+esac

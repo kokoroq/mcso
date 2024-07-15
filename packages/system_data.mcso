@@ -1,0 +1,12 @@
+# Minecraft Complex Server Operator (MCSO)
+#
+# Copyright (c) 2023-2024 kokoroq. All rights reserved.
+#
+# This script is the data for MCSO
+# DO NOT EDIT
+
+# Enable / Disable BE tools
+BE_TOOLS="disable"
+
+# Enable / Disable Java tools
+JAVA_TOOLS="disable"
