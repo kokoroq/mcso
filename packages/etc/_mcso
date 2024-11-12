@@ -1,0 +1,100 @@
+#!/bin/bash
+#
+#
+#
+########################################################################
+# Minecraft Complex Server Operator (MCSO)
+#
+# Copyright (c) 2023-2024 kokoroq. All rights reserved.
+#
+#
+#                  Completion for MCSO command
+#
+#
+# PLEASE DO NOT EDIT
+#
+#                                               VERSION: 1.0
+########################################################################
+
+
+#----------------------------------------------#
+#              Main completion                 #
+#----------------------------------------------#
+
+_mcso () {
+
+    local cur prev words cword split
+    _init_completion || return
+
+    case $cword  in
+        1)
+            COMPREPLY=($(compgen -W 'start stop restart enable disable backup restore com -s -u -v -h' -- "$cur")) 
+            return
+            ;;
+        2)
+            case ${words[1]} in
+                start)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                stop)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                restart)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                enable)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                disable)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                backup)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                restore)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                com)
+                    COMPREPLY=($(compgen -W 'be java' -- "$cur"))
+                    return
+                    ;;
+                -u)
+                    if [[ "$cur" == /* ]]; then
+                        _filedir
+                    else
+                        COMPREPLY=('online')
+                    fi
+                    return
+                    ;;
+                -v)
+                    COMPREPLY=('server')
+                    return
+                    ;;
+            esac
+            ;;
+        3)
+            case ${words[1]} in
+                com)
+                    COMPREPLY=('0')
+                    return
+                    ;;
+                backup)
+                    COMPREPLY=($(compgen -W 'full instant' -- "$cur"))
+                    return
+                    ;;
+            esac
+            ;;
+        *)
+            _filedir
+            ;;
+    esac
+}
+
+complete -F _mcso mcso

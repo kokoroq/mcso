@@ -56,7 +56,7 @@ func_stop_be () {
 
         for ((i=0; i<$timeout; i++))
         do
-            online2=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+            online2=`ps ax | grep $MS_BE_SERVER | grep -v grep | wc -l`
             if [ $online2 -ge 1 ]; then
                 sleep 5
                 if [ $i -eq 9 ]; then
@@ -112,7 +112,7 @@ func_stop_java () {
 
         for ((i=0; i<$timeout; i++))
         do
-            online2=`jps | grep $MS_JAVA_JAR | wc -l`
+            online2=`ps -ax | grep *.jar | grep -v grep | wc -l`
             if [ $online2 -ge 1 ]; then
                 sleep 5
                 if [ $i -eq 9 ]; then

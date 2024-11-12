@@ -10,4 +10,4 @@ ExecStop=/opt/mcso/stop_mcso.sh -j
 RemainAfterExit=yes
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target minecraft-master-session.service

@@ -16,6 +16,7 @@ usercfm="back"
 
 # read mcso.conf
 source /etc/mcso/mcso.conf
+source /etc/mcso/system_data.mcso
 
 # Confirm to start uninstall process
 clear
@@ -36,21 +37,25 @@ if [ "$usercfm" != "agree" ]; then
 fi
 
 # If the Minecraft BE Server is running, stop it
-online=`ps -ef | grep $MS_BE_SERVER | grep -v grep | wc -l`
-if [ $online -ge 1 ]; then
-    echo "Minecraft BE Server is running."
-    echo "Stop the server..."
-    $MCSO_DIR/stop_mcso.sh -b > /dev/null
-    echo "Stop complete"
+if [ $BE_TOOLS = "enable" ]; then
+    online=`ps -ef | grep $MS_BE_SERVER | grep -v grep | wc -l` >/dev/null 2>&1
+    if [ $online -ge 1 ]; then
+        echo "Minecraft BE Server is running."
+        echo "Stop the server..."
+        $MCSO_DIR/stop_mcso.sh -b > /dev/null
+        echo "Stop complete"
+    fi
 fi
 
 # If the Minecraft Java Server is running, stop it
-online=`jps | grep $MS_JAVA_JAR | wc -l`
-if [ $online -ge 1 ]; then
-    echo "Minecraft Java Server is running."
-    echo "Stop the server..."
-    $MCSO_DIR/stop_mcso.sh -j > /dev/null
-    echo "Stop complete"
+if [ $JAVA_TOOLS = "enable" ]; then
+    online=`jps | grep $MS_JAVA_JAR | wc -l` >/dev/null 2>&1
+    if [ $online -ge 1 ]; then
+        echo "Minecraft Java Server is running."
+        echo "Stop the server..."
+        $MCSO_DIR/stop_mcso.sh -j > /dev/null
+        echo "Stop complete"
+    fi
 fi
 
 echo -e ""
@@ -95,16 +100,16 @@ if [ $? = 0 ]; then
     sudo rm -rf $MCSO_DIR
 fi
 
-test -f /etc/mcso/mcso.conf
+test -d /etc/mcso/
 if [ $? = 0 ]; then
-    echo "- Remove /etc/mcso/mcso.conf"
-    sudo rm -f /etc/mcso/mcso.conf
+    echo "- Remove /etc/mcso/"
+    sudo rm -rf /etc/mcso/
 fi
 
-test -d /var/lib/mcso/
+test -f /usr/share/bash-completion/completions/_mcso
 if [ $? = 0 ]; then
-    echo "- Remove /var/lib/mcso/"
-    sudo rm -rf /var/lib/mcso/
+    echo "- Remove /usr/share/bash-completion/completions/_mcso"
+    sudo rm -f /usr/share/bash-completion/completions/_mcso
 fi
 
 echo "#############################"

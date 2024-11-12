@@ -21,12 +21,12 @@
 # Username / Usergroup
 if [ $# -ne 2 ]; then
     echo "Invalid arguments"
-    echo "To install, see README.txt"
+    echo "To install, see README.md"
     exit 1
 fi
 
 # read mcso.conf
-source ./packages/mcso.conf
+source ./packages/etc/mcso.conf
 
 #---------------------------------------------------------------#
 # VARS
@@ -76,10 +76,6 @@ func_be_setup () {
     test -d /etc/mcso
     if [ $? = 1 ];then sudo mkdir -p /etc/mcso;fi
     sudo chown -R $1:$2 /etc/mcso
-
-    test -d /var/lib/mcso/
-    if [ $? = 1 ];then sudo mkdir -p /var/lib/mcso;fi
-    sudo chown -R $1:$2 /var/lib/mcso
 
     # install require packages
     #   - unzip
@@ -142,33 +138,34 @@ func_be_setup () {
 
     # Install MCSO
     if [ ! -e /etc/systemd/system/minecraft-java-server.service ]; then
-        sudo cp -p ./packages/mcso /usr/local/bin/
+        sudo cp -p ./packages/bin/mcso /usr/local/bin/
         sudo chmod +x /usr/local/bin/mcso
-        sudo cp -p ./packages/start_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/start_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/start_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/start_mcso.sh
-        sudo cp -p ./packages/stop_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/stop_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/stop_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/stop_mcso.sh
-        sudo cp -p ./packages/backup_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/backup_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/backup_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/backup_mcso.sh
-        sudo cp -p ./packages/update_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/update_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/update_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/update_mcso.sh
-        sudo cp -p ./packages/mcso.conf /etc/mcso/
+        sudo cp -p ./packages/etc/mcso.conf /etc/mcso/
         sudo chown $1:$2 /etc/mcso/mcso.conf
-        sudo cp -p ./packages/system_data.mcso /var/lib/mcso/
-        sudo chown $1:$2 /var/lib/mcso/system_data.mcso
-        sudo cp ./packages/minecraft-master-session.service /etc/systemd/system/
+        sudo cp -p ./packages/etc/system_data.mcso /etc/mcso/
+        sudo chown $1:$2 /etc/mcso/system_data.mcso
+        sudo cp ./packages/service/minecraft-master-session.service /etc/systemd/system/
         sudo chmod 664 /etc/systemd/system/minecraft-master-session.service
         sudo chown root:root /etc/systemd/system/minecraft-master-session.service
-        sudo cp -p ./packages/system_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/system_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/system_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/system_mcso.sh
+        sudo cp -p ./packages/etc/_mcso /usr/share/bash-completion/completions/
     fi
 
-    sudo cp ./packages/minecraft-be-server.service /etc/systemd/system/
+    sudo cp ./packages/service/minecraft-be-server.service /etc/systemd/system/
     sudo chmod 664 /etc/systemd/system/minecraft-be-server.service
     sudo chown root:root /etc/systemd/system/minecraft-be-server.service
 
@@ -188,11 +185,11 @@ func_be_setup () {
     fi
 
     # Set to enable BE tools
-    sed -i -e 's/BE_TOOLS="disable"/BE_TOOLS="enable"/' /var/lib/mcso/system_data.mcso
+    sed -i -e 's/BE_TOOLS="disable"/BE_TOOLS="enable"/' /etc/mcso/system_data.mcso
 
     # Select new install or restore
-    if [ -e ./*.zip ]; then
-        cp ./*.zip $MS_BE_DIR
+    if [ -e ./ms_app/*.zip ]; then
+        cp ./ms_app/*.zip $MS_BE_DIR
         for filenm in $MS_BE_DIR/*.zip
         do
             if [ -e $filenm ]; then
@@ -200,7 +197,10 @@ func_be_setup () {
             fi
         done
         sudo chown $1:$2 $MS_BE_DIR/$tmp_be_name
-        unzip $tmp_be_name -d $MS_BE_DIR >/dev/null
+        unzip $MS_BE_DIR/$tmp_be_name -d $MS_BE_DIR >/dev/null
+        
+        # Create application version infomation file
+        echo $tmp_be_name | sed -r "s/bedrock-server-(.*)\.zip$/\1/" > $MS_BE_DIR/be_version.txt
     else
         echo "Do you want to install a new minecraft server or restore an existing one?"
         echo "  1 - NEW INSTALLATION"
@@ -220,20 +220,20 @@ func_be_setup () {
             echo $tmp_be_name | sed -r "s/bedrock-server-(.*)\.zip$/\1/" > $MS_BE_DIR/be_version.txt
             
         elif [ $select_newexi -eq 2 ]; then
-            if [ -e ./restore_server/minecraft_be_server_full_backup_*.tar.gz ]; then
+            if [ -e ./ms_app/minecraft_be_server_full_backup_*.tar.gz ]; then
                 echo "Restore application..."
                 rm -rf $MS_BE_DIR/*
-                cp ./restore_server/minecraft_be_server_full_backup_*.tar.gz $MS_BE_DIR
+                cp ./ms_app/minecraft_be_server_full_backup_*.tar.gz $MS_BE_DIR
                 tar -zxvf $MS_BE_DIR/minecraft_be_server_full_backup_*.tar.gz -C $MS_BE_DIR >/dev/null
                 mv $MS_BE_DIR/minecraft_be_server_full_backup_*/* $MS_BE_DIR
                 rm -rf $MS_BE_DIR/minecraft_be_server_full_backup_*
                 sudo chown -R $1:$2 $MS_BE_DIR/
             else
-                echo "Please copy the restore file of Minecraft BE Server to mcso.X.X.X-release/restore_server/"
+                echo "Please copy the restore file of Minecraft BE Server to mcso.X.X.X-release/ms_app/"
                 read -p "When you are done, press ENTER:" wait_enter
                 echo "Restore application..."
                 rm -rf $MS_BE_DIR/*
-                cp ./restore_server/minecraft_be_server_full_backup_*.tar.gz $MS_BE_DIR
+                cp ./ms_app/minecraft_be_server_full_backup_*.tar.gz $MS_BE_DIR
                 tar -zxvf $MS_BE_DIR/minecraft_be_server_full_backup_*.tar.gz -C $MS_BE_DIR >/dev/null
                 mv $MS_BE_DIR/minecraft_be_server_full_backup_*/* $MS_BE_DIR
                 rm -rf $MS_BE_DIR/minecraft_be_server_full_backup_*
@@ -279,10 +279,6 @@ func_java_setup () {
     if [ $? = 1 ];then sudo mkdir -p /etc/mcso;fi
     sudo chown -R $1:$2 /etc/mcso
 
-    test -d /var/lib/mcso/
-    if [ $? = 1 ];then sudo mkdir -p /var/lib/mcso;fi
-    sudo chown -R $1:$2 /var/lib/mcso
-
     # install require packages
     #   - java
     #   - tmux
@@ -298,7 +294,7 @@ func_java_setup () {
     pkgs_count=0
     if [ "$selectos" = "ubuntu" ] || [ "$selectos" = "" ]; then
         # Ubuntu
-        pkgs=("openjdk-21-jdk" "cron" "tmux" "wget" "__EOF__")
+        pkgs=("openjdk-21-jre-headless" "cron" "tmux" "wget" "__EOF__")
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update >/dev/null
         while [ ${pkgs[$pkgs_count]} != "__EOF__" ]
@@ -345,33 +341,34 @@ func_java_setup () {
 
     # Install MCSO
     if [ ! -e /etc/systemd/system/minecraft-be-server.service ]; then
-        sudo cp -p ./packages/mcso /usr/local/bin/
+        sudo cp -p ./packages/bin/mcso /usr/local/bin/
         sudo chmod +x /usr/local/bin/mcso
-        sudo cp -p ./packages/start_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/start_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/start_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/start_mcso.sh
-        sudo cp -p ./packages/stop_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/stop_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/stop_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/stop_mcso.sh
-        sudo cp -p ./packages/backup_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/backup_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/backup_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/backup_mcso.sh
-        sudo cp -p ./packages/update_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/update_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/update_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/update_mcso.sh
-        sudo cp -p ./packages/mcso.conf /etc/mcso/
+        sudo cp -p ./packages/etc/mcso.conf /etc/mcso/
         sudo chown $1:$2 /etc/mcso/mcso.conf
-        sudo cp -p ./packages/system_data.mcso /var/lib/mcso/
-        sudo chown $1:$2 /var/lib/mcso/system_data.mcso
-        sudo cp ./packages/minecraft-master-session.service /etc/systemd/system/
+        sudo cp -p ./packages/etc/system_data.mcso /etc/mcso/
+        sudo chown $1:$2 /etc/mcso/system_data.mcso
+        sudo cp ./packages/service/minecraft-master-session.service /etc/systemd/system/
         sudo chmod 664 /etc/systemd/system/minecraft-master-session.service
         sudo chown root:root /etc/systemd/system/minecraft-master-session.service
-        sudo cp -p ./packages/system_mcso.sh $MCSO_DIR
+        sudo cp -p ./packages/scripts/system_mcso.sh $MCSO_DIR
         sudo chmod +x $MCSO_DIR/system_mcso.sh
         sudo chown $1:$2 $MCSO_DIR/system_mcso.sh
+        sudo cp -p ./packages/etc/_mcso /usr/share/bash-completion/completions/
     fi
 
-    sudo cp ./packages/minecraft-java-server.service /etc/systemd/system/
+    sudo cp ./packages/service/minecraft-java-server.service /etc/systemd/system/
     sudo chmod 664 /etc/systemd/system/minecraft-java-server.service
     sudo chown root:root /etc/systemd/system/minecraft-java-server.service
 
@@ -384,11 +381,11 @@ func_java_setup () {
     fi
 
     # Set to enable Java tools
-    sed -i -e 's/JAVA_TOOLS="disable"/JAVA_TOOLS="enable"/' /var/lib/mcso/system_data.mcso
+    sed -i -e 's/JAVA_TOOLS="disable"/JAVA_TOOLS="enable"/' /etc/mcso/system_data.mcso
 
     # Select new install or restore
-    if [ -e ./*.jar ]; then
-        cp ./*.jar $MS_JAVA_DIR
+    if [ -e ./ms_app/*.jar ]; then
+        cp ./ms_app/*.jar $MS_JAVA_DIR
         for filenm in $MS_JAVA_DIR/*.jar
         do
             if [ -e $filenm ]; then
@@ -421,10 +418,10 @@ func_java_setup () {
             cd $mcso_installer_path
         # Restore
         elif [ $select_newexi -eq 2 ]; then
-            if [ -e ./restore_server/minecraft_java_server_full_backup_*.tar.gz ]; then
+            if [ -e ./ms_app/minecraft_java_server_full_backup_*.tar.gz ]; then
                 echo "Restore application..."
                 rm -rf $MS_JAVA_DIR/*
-                cp ./restore_server/minecraft_java_server_full_backup_*.tar.gz $MS_JAVA_DIR
+                cp ./ms_app/minecraft_java_server_full_backup_*.tar.gz $MS_JAVA_DIR
                 tar -zxvf $MS_JAVA_DIR/minecraft_java_server_full_backup_*.tar.gz -C $MS_JAVA_DIR >/dev/null
                 mv $MS_JAVA_DIR/minecraft_java_server_full_backup_*/* $MS_JAVA_DIR
                 rm -rf $MS_JAVA_DIR/minecraft_java_server_full_backup_*
@@ -436,11 +433,11 @@ func_java_setup () {
                     fi
                 done
             else
-                echo "Please copy the restore file of Minecraft Java Server to mcso.X.X.X-release/restore_server/"
+                echo "Please copy the restore file of Minecraft Java Server to mcso.X.X.X-release/ms_app/"
                 read -p "When you are done, press ENTER:" wait_enter
                 echo "Restore application..."
                 rm -rf $MS_JAVA_DIR/*
-                cp ./restore_server/minecraft_java_server_full_backup_*.tar.gz $MS_JAVA_DIR
+                cp ./ms_app/minecraft_java_server_full_backup_*.tar.gz $MS_JAVA_DIR
                 tar -zxvf $MS_JAVA_DIR/minecraft_java_server_full_backup_*.tar.gz -C $MS_JAVA_DIR >/dev/null
                 mv $MS_JAVA_DIR/minecraft_java_server_full_backup_*/* $MS_JAVA_DIR
                 rm -rf $MS_JAVA_DIR/minecraft_java_server_full_backup_*

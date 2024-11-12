@@ -23,7 +23,7 @@ TIME=`date "+%Y%m%d_%H%M%S"`
 full_be_backup () {
     bkcount=`ls -1U $FULL_BACKUP_BE_DIR | wc -l`
     if [ $bkcount -gt $FULL_BACKUP_ROTATE ]; then
-        ls -1U -tr $FULL_BACKUP_BE_DIR | head -1 | xargs -i rm -f $FULL_BACKUP_BE_DIR/{}
+        ls -1U -tr $FULL_BACKUP_BE_DIR | head -1 | xargs -I {} rm -f $FULL_BACKUP_BE_DIR/{}
     fi
 
     stopcount=0
@@ -57,7 +57,7 @@ full_be_backup () {
 full_java_backup () {
     bkcount=`ls -1U $FULL_BACKUP_JAVA_DIR | wc -l`
     if [ $bkcount -gt $FULL_BACKUP_ROTATE ]; then
-        ls -1U -tr $FULL_BACKUP_JAVA_DIR | head -1 | xargs -i rm -f $FULL_BACKUP_JAVA_DIR/{}
+        ls -1U -tr $FULL_BACKUP_JAVA_DIR | head -1 | xargs -I {} rm -f $FULL_BACKUP_JAVA_DIR/{}
     fi
 
     stopcount=0
@@ -93,7 +93,7 @@ full_java_backup () {
 instant_be_backup () {
     bkcount=`ls -1U $INSTANT_BACKUP_BE_DIR | wc -l`
     if [ $bkcount -gt $INSTANT_BACKUP_ROTATE ]; then
-        ls -1U -tr $INSTANT_BACKUP_BE_DIR | head -1 | xargs rm -f
+        ls -1U -tr $INSTANT_BACKUP_BE_DIR | head -1 | xargs -I {} rm -f $INSTANT_BACKUP_BE_DIR/{}
     fi
     instantbk_dir="minecraft_be_server_instant_backup_$TIME"
     mkdir $BACKUP_BE_DIR/$instantbk_dir
@@ -118,7 +118,7 @@ instant_be_backup () {
 instant_java_backup () {
     bkcount=`ls -1U $INSTANT_BACKUP_JAVA_DIR | wc -l`
     if [ $bkcount -gt $INSTANT_BACKUP_ROTATE ]; then
-        ls -1U -tr $INSTANT_BACKUP_JAVA_DIR | head -1 | xargs rm -f
+        ls -1U -tr $INSTANT_BACKUP_JAVA_DIR | head -1 | xargs -I {} rm -f $INSTANT_BACKUP_JAVA_DIR/{}
     fi
     instantjv_dir="minecraft_java_server_instant_backup_$TIME"
     mkdir $BACKUP_JAVA_DIR/$instantjv_dir

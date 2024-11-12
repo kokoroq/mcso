@@ -2,7 +2,7 @@
 #
 # read systemc files
 source /etc/mcso/mcso.conf
-source /var/lib/mcso/system_data.mcso
+source /etc/mcso/system_data.mcso
 
 ##################################################################
 # Minecraft Complex Server Operator (MCSO)
@@ -21,42 +21,49 @@ usage () {
 
     Minecraft Complex Server Operator tools
 
-        -bb [full/instant]              Backup for Minecraft BE Server, Add "full" or "instant" after -bb
-        -bj [full/instant]              Backup for Minecraft Java Server, Add "full" or "instant" after -bj
-        -cb SESSION_NO COMMAND          Send command to the Minecraft BE Server through tmux
-        -cj SESSION_NO COMMAND          Send command to the Minecraft Java Server through tmux 
-        -r [be/java]                    [RECOMMEND using systemd] Run Minecraft Server
-        -t [be/java]                    [RECOMMEND using systemd] Terminate Minecraft Server
-        -s | --stat                     Display current Minecraft Server status
-        -u [online/FILE PATH]           Update minecraft server application
-                                            online : Download from the internet and update
-                                            FILE PATH : Update by specifying local update file
-        -v [server]                     Display version of
-                                            -v : MCSO version
-                                            -v server : Minecraft server version
-        -h                              Display MCSO help
-        --restore [be/java]             Restore any full backup
-        --cpua [enable/disable]         Enable/Disable the specification of the processor used by the Minecraft Server
-                                        To specify the number of CPUs, either edit parameter in the mcso.conf or execute the following command
-                                            -c [be/java] PROCESSOR_ID(s)
+        backup [be/java] [full/instant]     Backup for Minecraft BE / Java Server
+                                                Add "full" or "instant" after edition
+        com [be/java] SESSION_NO COMMAND    Send console command to the Minecraft BE / Java Server
+                                                SESSION_NO: 0 (Default)
+                                                COMMAND: Minecraft console command
+        start [be/java]                     Start Minecraft Server
+        stop [be/java]                      Stop Minecraft Server
+        restart [be/java]                   Restart Minecraft Server
+        enable [be/java]                    Auto-start Minecraft Server
+        disable [be/java]                   Disable auto-start Minecraft Server
+        -s | --stat                         Display current Minecraft Server status
+        -u [online/FILE PATH]               Update minecraft server application
+                                                online : Download from the internet and update
+                                                FILE PATH : Update by specifying local update file
+        -v [server]                         Display version of
+                                                -v : MCSO version
+                                                -v server : Minecraft server version
+        -h                                  Display MCSO help
+        restore [be/java]                   Restore any full backup
+        --cpua [enable/disable]             Enable/Disable the specification of the processor used by the Minecraft Server
+                                            To specify the number of CPUs, either edit parameter in the mcso.conf or execute the following command
+                                                --cpua [be/java] PROCESSOR_ID(s)
 
     Examples:
-        mcso -bb full                     Start BE full backup
-        mcso -cb 0 "say HELLO!"           Send COMMAND to tmux
+        mcso start be                       Start BE server
+        mcso backup be full                 Start BE full backup
+        mcso com java 0 "say HELLO!"        Send COMMAND to tmux
 EOF
 }
 
 ##################################################################
 #                           FUNCTIONS                            #
 ##################################################################
-#   1. Backup
-#   2. Sending Minecraft command
-#   3. MCSO status
-#   4. CPU Affinity
-#   5. Update
-#   6. Display version
-#   7. Start server
-#   8. Stop server
+#   1.  Backup
+#   2.  Sending Minecraft command
+#   3.  MCSO status
+#   4.  CPU Affinity
+#   5.  Update
+#   6.  Display version
+#   7.  Start server
+#   8.  Stop server
+#   9.  Restart server
+#   10. Auto start/stop server
 ##################################################################
 
 
@@ -102,26 +109,26 @@ func_bk_java () {
 # Send command to the Minecraft Server through tmux
 func_sc () {
     if [ "$1" = "be" ]; then
-        online=`tmux ls 2>&1 | grep $TMUX_BE_SESSION | wc -l`
+        online=`tmux list-windows -t $TMUX_MASTER_SESSION 2>&1 | grep $TMUX_BE_WINDOW$BE_COUNT | wc -l`
         if [ $online -eq 0 ]; then
             echo "Minecraft Server is not running."
         else
             echo "SEND THE FOLLOWING COMMAND TO THE MINECRAFT SERVER"
             echo "$3"
             echo -e ""
-            /usr/bin/tmux send-keys -t $TMUX_BE_SESSION$2 "$3" C-m
+            /usr/bin/tmux send-keys -t $TMUX_MASTER_SESSION:$TMUX_BE_WINDOW$2 "$3" C-m
             echo "Complete"
             echo "Please check the tmux session of Minecraft Server"
         fi
     else
-        online=`tmux ls 2>&1 | grep $TMUX_JAVA_SESSION | wc -l`
+        online=`tmux list-windows -t $TMUX_MASTER_SESSION 2>&1 | grep $TMUX_JAVA_WINDOW$JAVA_COUNT | wc -l`
         if [ $online -eq 0 ]; then
             echo "Minecraft Server is not running."
         else
             echo "SEND THE FOLLOWING COMMAND TO THE MINECRAFT SERVER"
             echo "$3"
             echo -e ""
-            /usr/bin/tmux send-keys -t $TMUX_JAVA_SESSION$2 "$3" C-m
+            /usr/bin/tmux send-keys -t $TMUX_MASTER_SESSION:$TMUX_JAVA_WINDOW$2 "$3" C-m
             echo "Complete"
             echo "Please check the tmux session of Minecraft Server"
         fi
@@ -292,20 +299,23 @@ func_start () {
     if [ "$1" = "be" ]; then
         if [ $BE_TOOLS = "enable" ]; then
             # Check Master session
-            sudo systemctl status minecraft-master-session.service >/dev/null
-            if [ "$?" -ne 0 ]; then
+            online=`sudo systemctl is-active minecraft-master-session.service` >/dev/null
+            if [ "$online" = "inactive" ]; then
                 sudo systemctl start minecraft-master-session.service >/dev/null
-                sudo systemctl status minecraft-master-session.service >/dev/null
-                if [ "$?" -ne 0 ]; then
+                online=`sudo systemctl is-active minecraft-master-session.service` >/dev/null
+                if [ "$online" = "inactive" ]; then
                     echo "The master session could NOT be ACTIVE"
                     echo "Check your system"
                     exit 1
                 fi
             fi
             sudo systemctl start minecraft-be-server.service >/dev/null
-            online=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
-            if [ $online -ge 1 ]; then
+            sleep 5
+            online2=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+            if [ $online2 -ge 1 ]; then
                 echo "Minecraft BE Server is RUNNING"
+                # For Restart Flag
+                restart_check_flag=0
             else
                 echo "FAILED to start Minecraft BE Server"
             fi
@@ -316,20 +326,23 @@ func_start () {
     elif [ "$1" = "java" ]; then
         if [ $JAVA_TOOLS = "enable" ]; then
             # Check Master session
-            sudo systemctl status minecraft-master-session.service >/dev/null
-            if [ "$?" -ne 0 ]; then
+            online=`sudo systemctl is-active minecraft-master-session.service` >/dev/null
+            if [ "$online" = "inactive" ]; then
                 sudo systemctl start minecraft-master-session.service >/dev/null
-                sudo systemctl status minecraft-master-session.service >/dev/null
-                if [ "$?" -ne 0 ]; then
+                online=`sudo systemctl is-active minecraft-master-session.service` >/dev/null
+                if [ "$online" = "inactive" ]; then
                     echo "The master session could NOT be ACTIVE"
                     echo "Check your system"
                     exit 1
                 fi
             fi
             sudo systemctl start minecraft-java-server.service >/dev/null
-            online=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
-            if [ $online -ge 1 ]; then
+            sleep 5
+            online2=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
+            if [ $online2 -ge 1 ]; then
                 echo "Minecraft Java Server is RUNNING"
+                # For Restart Flag
+                restart_check_flag=0
             else
                 echo "FAILED to start Minecraft Java Server"
             fi
@@ -354,15 +367,17 @@ func_stop () {
                     echo "Check your system"
                     exit 1
                 else
-                    sudo systemctl stop minecraft-master-session.service >/dev/null
-                    sudo systemctl status minecraft-master-session.service >/dev/null
-                    if [ "$?" -ne 0 ]; then
-                        echo "Minecraft BE server has been TERMINATED"
-                    else
-                        echo "The master session could NOT be TERMINATED"
-                        echo "Check your system"
-                        exit 1
+                    online2=`jps | grep $(basename ${MS_JAVA_JAR}) | wc -l`
+                    if [ $online2 -le 0 ]; then
+                        sudo systemctl stop minecraft-master-session.service >/dev/null
+                        online3=`sudo systemctl is-active minecraft-master-session.service` >/dev/null
+                        if [ "$online3" = "active" ]; then
+                            echo "The master session could NOT be TERMINATED"
+                            echo "Check your system"
+                            exit 1
+                        fi
                     fi
+                    echo "Minecraft BE server has been TERMINATED"
                 fi
             else
                 echo "Minecraft BE Server is NOT RUNNING"
@@ -383,15 +398,17 @@ func_stop () {
                     echo "Check your system"
                     exit 1
                 else
-                    sudo systemctl stop minecraft-master-session.service >/dev/null
-                    sudo systemctl status minecraft-master-session.service >/dev/null
-                    if [ "$?" -ne 0 ]; then
-                        echo "Minecraft Java server has been TERMINATED"
-                    else
-                        echo "The master session could NOT be TERMINATED"
-                        echo "Check your system"
-                        exit 1
+                    online2=`ps aux | grep $MS_BE_SERVER | grep -v grep | wc -l`
+                    if [ $online2 -le 0 ]; then
+                        sudo systemctl stop minecraft-master-session.service >/dev/null
+                        online3=`sudo systemctl is-active minecraft-master-session.service` >/dev/null
+                        if [ "$online3" = "active" ]; then
+                            echo "The master session could NOT be TERMINATED"
+                            echo "Check your system"
+                            exit 1
+                        fi
                     fi
+                    echo "Minecraft Java server has been TERMINATED"
                 fi
             else
                 echo "Minecraft Java Server is NOT RUNNING"
@@ -403,15 +420,87 @@ func_stop () {
     fi
 }
 
+# Restart server
+func_restart () {
+    echo "Restarting..."
+    # Restart Flag
+    restart_check_flag=1
+    func_stop $1
+    if [ $restart_check_flag -ne 0 ]; then
+        echo "Minecraft server could not be restarted."
+        echo "Check your system"
+        exit 1
+    fi
+    # Reset Restart Flag
+    restart_check_flag=1
+    func_start $1
+    if [ $restart_check_flag -ne 0 ]; then
+        echo "Minecraft server could not be started."
+        echo "Check your system"
+        exit 1
+    fi
+    echo "Restart Complete"
+}
+
+
+# Auto start/stop server
+func_auto_start () {
+    if [ "$1" = "be" ]; then
+        sudo systemctl is-enabled minecraft-master-session.service >/dev/null
+        if [ "$?" -ne 0 ]; then
+            sudo systemctl enable minecraft-master-session.service >/dev/null 2>&1 
+        fi
+        sudo systemctl is-enabled minecraft-be-server.service >/dev/null
+        if [ "$?" -ne 0 ]; then
+            sudo systemctl enable minecraft-be-server.service >/dev/null 2>&1 
+        fi
+        echo "BE server set to start automatically."
+    elif [ "$1" = "java" ]; then
+        sudo systemctl is-enabled minecraft-master-session.service >/dev/null
+        if [ "$?" -ne 0 ]; then
+            sudo systemctl enable minecraft-master-session.service >/dev/null 2>&1 
+        fi
+        sudo systemctl is-enabled minecraft-java-server.service >/dev/null
+        if [ "$?" -ne 0 ]; then
+            sudo systemctl enable minecraft-java-server.service >/dev/null 2>&1 
+        fi
+        echo "Java server set to start automatically."
+    fi
+}
+
+func_auto_stop () {
+    if [ "$1" = "be" ]; then
+        sudo systemctl is-enabled minecraft-be-server.service >/dev/null
+        if [ "$?" -eq 0 ]; then
+            sudo systemctl disable minecraft-be-server.service >/dev/null 2>&1 
+        fi
+        sudo systemctl is-enabled minecraft-java-server.service >/dev/null
+        if [ "$?" -ne 0 ]; then
+            sudo systemctl disable minecraft-master-session.service >/dev/null 2>&1 
+        fi
+        echo "BE server set to start manually."
+    elif [ "$1" = "java" ]; then
+        sudo systemctl is-enabled minecraft-java-server.service >/dev/null
+        if [ "$?" -eq 0 ]; then
+            sudo systemctl disable minecraft-java-server.service >/dev/null 2>&1 
+        fi
+        sudo systemctl is-enabled minecraft-be-server.service >/dev/null
+        if [ "$?" -ne 0 ]; then
+            sudo systemctl disable minecraft-master-session.service >/dev/null 2>&1 
+        fi
+        echo "Java server set to start manually."
+    fi
+}
+
+
+
 ##################################################################
 #                               Main                             #
 ##################################################################
 case $1 in
-    -bb ) func_bk_be $2 ;;
-    -bj ) func_bk_java $2 ;;
-    -cb ) func_sc "be" $2 "$3" ;;
-    -cj ) func_sc "jv" $2 "$3" ;;
-    -r | --run ) 
+    backup ) if [ "$2" = "be" ]; then func_bk_be $3; elif [ "$2" = "java" ]; then func_bk_java $3; fi ;;
+    com ) if [ "$2" = "be" ]; then func_sc "be" $3 "$4"; elif [ "$2" = "java" ]; then func_sc "jv" $3 "$4"; fi ;; 
+    start ) 
         if [ $# -eq 2 ]; then
             func_start $2
         else
@@ -430,7 +519,7 @@ case $1 in
             fi
         fi
         ;;
-    -t | --terminate )
+    stop )
         if [ $# -eq 2 ]; then
             func_stop $2
         else
@@ -449,10 +538,13 @@ case $1 in
             fi
         fi
         ;;
+    restart ) func_restart $2 ;;
+    enable ) func_auto_start $2 ;;
+    disable ) func_auto_stop $2 ;;
     -s | --stat ) func_status ;;
     -u ) func_update $2 ;;
     --cpua ) func_cpua $2 $3 ;;
-    --restore ) if [ "$2" = "be" ]; then $MCSO_DIR/backup_mcso.sh -rb; elif [ "$2" = "java" ]; then $MCSO_DIR/backup_mcso.sh -rj; fi ;;
+    restore ) if [ "$2" = "be" ]; then $MCSO_DIR/backup_mcso.sh -rb; elif [ "$2" = "java" ]; then $MCSO_DIR/backup_mcso.sh -rj; fi ;;
     -v ) if [ "$2" = "server" ]; then func_version "ms" ; else func_version "mcso"; fi ;;
     -h ) usage ;;
     * ) echo "Invalid argument"; usage ;;
